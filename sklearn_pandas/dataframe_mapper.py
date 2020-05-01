@@ -342,13 +342,13 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
 
         X       the data to inverse transform
         """
-
-        X_inv = pd.DataFrame()
-        # We will populate the inverse transformed dataframe column by column
+        if X.__class__ == pd.DataFrame:
+            X = X[self.transformed_names_].values
 
         # Let's keep track of the column we've processed
         prev_col = 0
         for columns, transformers, transformed_cols in self.transformed_cols_:
+
             # Determine the column number of the last column in X
             # corresponding to the original column we're computing
             last_col = prev_col + len(transformed_cols)
@@ -356,10 +356,14 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
             # Inverse transform the columns in X for the current transformer
             col_inv = pd.DataFrame(transformers.inverse_transform(
                                       X[:, prev_col:last_col]),
-                                   columns=[columns])
+                                   columns=columns)
 
             # Append the inverse transformed column to the output data frame
-            X_inv = pd.concat([X_inv, col_inv], axis=1)
+
+            if prev_col == 0:
+                X_inv = col_inv
+            else:
+                X_inv = pd.concat([X_inv, col_inv], axis=1)
 
             # For the next iteration, update the last column processed
             prev_col = last_col

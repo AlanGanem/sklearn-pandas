@@ -1,6 +1,8 @@
+import numpy as np
 from .dataframe_mapper import DataFrameMapper
 from tqdm.notebook import tqdm
 tqdm.pandas()
+import copy
 
 
 class GroupWiseTransformer:
@@ -11,18 +13,24 @@ class GroupWiseTransformer:
     def __init__(self):
         return
 
-    def fit(self, df, feature_def, group_columns, **dfmapperargs):
+    def fit(self, df,feature_def, group_columns, y_cols = [] ,**dfmapperargs):
         #define groupby object
         groupby_object = df.groupby(group_columns)
         #get group names
         groups = [g for g, _ in groupby_object]
         # create a dict mapping a DataFrameMapper instance to each group in groups
-        scalers = {group: DataFrameMapper(feature_def, df_out=True, **dfmapperargs) for group in groups}
+        scalers = {group: copy.deepcopy(DataFrameMapper(feature_def, df_out=True, **dfmapperargs)) for group in groups}
 
         # apply fit for each group
         for group in tqdm(scalers):
-            group_df = groupby_object.get_group(group)
-            scalers[group].fit(group_df)
+            try:
+                group_df = groupby_object.get_group(group)
+                if y_cols:
+                    scalers[group].fit(group_df, group_df[y_cols])
+                else:
+                    scalers[group].fit(group_df)
+            except:
+                pass
 
         #fitted columns
         self.columns = [i[0][0] if i[0].__class__ == list else i[0] for i in scalers[group].features]
@@ -37,8 +45,8 @@ class GroupWiseTransformer:
         df.loc[:, self.columns] = self._apply_method(df[self.group_columns + self.columns], 'transform')[self.columns]
         return df
 
-    def fit_transform(self, df, feature_def, group_columns, **dfmapperargs):
-        self.fit(df, feature_def, group_columns, **dfmapperargs)
+    def fit_transform(self, df, feature_def, group_columns,y_cols = [], **dfmapperargs):
+        self.fit(df, feature_def, group_columns,y_cols, **dfmapperargs)
         return self.transform(df)
 
     def inverse_transform(self, df):
@@ -56,10 +64,11 @@ class GroupWiseTransformer:
         :param method:
         :return:
         '''
+        df = df.copy()
         groupby_object = df.groupby(self.group_columns)
         return groupby_object.progress_apply(lambda x: self._robust_apply(x, method=method)).reset_index(drop=True)
 
-    def _robust_apply(self, df, method, handler='ignore'):
+    def _robust_apply(self, df, method, handler='coerce'):
         '''
         internal method to apply transformer method handling group exceptions
         :param df:
@@ -71,7 +80,7 @@ class GroupWiseTransformer:
             group = tuple([df[i][0] for i in self.group_columns])
             return getattr(self.scalers[group], method)(df)
 
-        except KeyError: #in case a new group appears
+        except: #in case a new group appears or other errors
 
             if handler == 'coerce':
                 # return a NaN filled df

@@ -267,6 +267,38 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
 
         X       the data to transform
         """
+        return self._apply_transform(X,'transform')
+
+    def inverse_transform(self, X):
+        """
+        inverse_transform the given data. Assumes that fit has already been called.
+
+        X       the data to transform
+        """
+        return self._apply_transform(X,'inverse_transform')
+
+    def predict(self, X):
+        """
+        predict the given data. Assumes that fit has already been called.
+
+        X       the data to transform
+        """
+        return self._apply_transform(X,'predict')
+
+    def predict_proba(self, X):
+        """
+        predict the given data. Assumes that fit has already been called.
+
+        X       the data to transform
+        """
+        return self._apply_transform(X,'predict_proba')
+
+    def _apply_transform(self, X, method):
+        """
+        Transform the given data. Assumes that fit has already been called.
+
+        X       the data to transform
+        """
         extracted = []
         self.transformed_names_ = []
         self.transformed_cols_ = []
@@ -278,7 +310,7 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
             Xt = self._get_col_subset(X, columns, input_df)
             if transformers is not None:
                 with add_column_names_to_exception(columns):
-                    Xt = transformers.transform(Xt)
+                    Xt = getattr(transformers, method)(Xt)
             extracted.append(_handle_feature(Xt))
 
             alias = options.get('alias')
@@ -295,7 +327,7 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
             Xt = self._get_col_subset(X, unsel_cols, self.input_df)
             if self.built_default is not None:
                 with add_column_names_to_exception(unsel_cols):
-                    Xt = self.built_default.transform(Xt)
+                    Xt = getattr(self.built_default, method)(Xt)
                 self.transformed_names_ += self.get_names(
                     unsel_cols, self.built_default, Xt)
             else:
@@ -335,37 +367,3 @@ class DataFrameMapper(BaseEstimator, TransformerMixin):
         else:
             return stacked
 
-    def inverse_transform(self, X):
-        """
-        Inverse transform the given data. Assumes that fit has already been
-        called.
-
-        X       the data to inverse transform
-        """
-        if X.__class__ == pd.DataFrame:
-            X = X[self.transformed_names_].values
-
-        # Let's keep track of the column we've processed
-        prev_col = 0
-        for columns, transformers, transformed_cols in self.transformed_cols_:
-
-            # Determine the column number of the last column in X
-            # corresponding to the original column we're computing
-            last_col = prev_col + len(transformed_cols)
-
-            # Inverse transform the columns in X for the current transformer
-            col_inv = pd.DataFrame(transformers.inverse_transform(
-                                      X[:, prev_col:last_col]),
-                                   columns=columns)
-
-            # Append the inverse transformed column to the output data frame
-
-            if prev_col == 0:
-                X_inv = col_inv
-            else:
-                X_inv = pd.concat([X_inv, col_inv], axis=1)
-
-            # For the next iteration, update the last column processed
-            prev_col = last_col
-
-        return X_inv
